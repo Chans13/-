@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
 
 
 DEFAULT_API_URL = "https://www.youthcenter.go.kr/go/ythip/getPlcy"
@@ -11,6 +12,8 @@ DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 8000
 DEFAULT_TRANSPORT = "streamable-http"
 DEFAULT_TIMEOUT_SECONDS = 15.0
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DOTENV_CANDIDATES = (Path.cwd() / ".env", PROJECT_ROOT / ".env")
 
 
 @dataclass(frozen=True)
@@ -45,8 +48,33 @@ def _get_float(name: str, default: float) -> float:
         raise ValueError(f"{name} must be a number") from exc
 
 
+def _strip_quotes(value: str) -> str:
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        return value[1:-1]
+    return value
+
+
+def _load_dotenv() -> None:
+    """Load local .env values without overriding real environment variables."""
+
+    for dotenv_path in dict.fromkeys(DOTENV_CANDIDATES):
+        if not dotenv_path.is_file():
+            continue
+        for line in dotenv_path.read_text(encoding="utf-8-sig").splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#") or "=" not in stripped:
+                continue
+            name, value = stripped.split("=", 1)
+            name = name.strip()
+            if not name or name in os.environ:
+                continue
+            os.environ[name] = _strip_quotes(value.strip())
+
+
 def get_settings() -> Settings:
     """Load settings from process environment."""
+
+    _load_dotenv()
 
     return Settings(
         youth_center_api_key=os.getenv("YOUTH_CENTER_API_KEY", ""),
@@ -56,4 +84,3 @@ def get_settings() -> Settings:
         transport=os.getenv("MCP_TRANSPORT", DEFAULT_TRANSPORT),
         timeout_seconds=_get_float("YOUTH_CENTER_TIMEOUT_SECONDS", DEFAULT_TIMEOUT_SECONDS),
     )
-
